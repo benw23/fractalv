@@ -2,7 +2,7 @@ extern crate minifb;
 extern crate rayon;
 extern crate num_complex;
 
-use minifb::{Key, Window, WindowOptions};
+use minifb::{Key, Window, WindowOptions, ScaleMode};
 use rayon::prelude::*;
 use num_complex::Complex;
 
@@ -36,7 +36,6 @@ enum Fractal {
 
 impl Fractal {
     fn render(&self, ctx: &mut FractalContext) {
-        if !ctx.updated {return;};
         ctx.pixels.resize(ctx.dimensions.0 * ctx.dimensions.1, 0);
         
         match self {
@@ -52,6 +51,7 @@ impl Fractal {
 
         ctx.updated = false;
     }
+
     fn mandelbrot(ctx: &mut FractalContext, maxiter: usize) {
         (0..ctx.pixels.len()).into_par_iter().for_each(|i| {
             let (x, y) = ((i % ctx.dimensions.0) as f64 - (ctx.dimensions.0 as f64 / 2.), (i / ctx.dimensions.0) as f64 - (ctx.dimensions.1 as f64 / 2.));
@@ -97,58 +97,103 @@ impl Fractal {
 }
 
 fn main() {
-    let mut fract = Fractal::BurningShip(50);
+    let args: Vec<String> = std::env::args().collect();
+    let fract = match args.len() {
+        1 => {
+            println!("Usage: {} <fractal> [iterations]", args[0]);
+            println!("Available fractals: mandelbrot, burning-ship");
+            return;
+        },
+        2 => {
+            match args[1].as_str() {
+                "mandelbrot" => Fractal::Mandelbrot(30),
+                "burning-ship" => Fractal::BurningShip(30),
+                _ => {
+                    println!("Usage: {} <fractal> [iterations]", args[0]);
+                    println!("Available fractals: mandelbrot, burning-ship");
+                    return;
+                }
+            }
+        },
+        3 => {
+            let iterations = args[2].parse::<usize>().unwrap();
+            match args[1].as_str() {
+                "mandelbrot" => Fractal::Mandelbrot(iterations),
+                "burning-ship" => Fractal::BurningShip(iterations),
+                _ => {
+                    println!("Usage: {} <fractal> [iterations]", args[0]);
+                    println!("Available fractals: mandelbrot, burning-ship");
+                    return;
+                }
+            }
+        }
+        _ => {
+            println!("Usage: {} <fractal> [iterations]", args[0]);
+            println!("Available fractals: mandelbrot, burning-ship");
+            return;
+        }
+    };
+
     let mut ctx = FractalContext::new();
 
     let mut window = Window::new(
         "Fractal Viewer",
         WIDTH,
         HEIGHT,
-        WindowOptions::default(),
+        WindowOptions {
+            resize: true,
+            scale_mode: ScaleMode::Stretch,
+            ..WindowOptions::default()
+        },
     )
-    .unwrap_or_else(|e| {
-        panic!("{}", e);
-    });
+    .expect("failed to create window");
 
     window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
 
-        if(window.is_key_down(Key::I)) {
+        if window.get_size() != ctx.dimensions {
+            ctx.dimensions = window.get_size();
+            ctx.updated = true;
+        }
+
+        if window.is_key_down(Key::I) {
             ctx.scale *= 1.1;
             ctx.updated = true;
         }
 
-        if(window.is_key_down(Key::O)) {
+        if window.is_key_down(Key::O) {
             ctx.scale /= 1.1;
             ctx.updated = true;
         }
 
-        if(window.is_key_down(Key::Up)) {
+        if window.is_key_down(Key::Up) {
             ctx.pan.1 -= 1. / ctx.scale;
             ctx.updated = true;
         }
 
-        if(window.is_key_down(Key::Down)) {
+        if window.is_key_down(Key::Down) {
             ctx.pan.1 += 1. / ctx.scale;
             ctx.updated = true;
         }
 
-        if(window.is_key_down(Key::Left)) {
+        if window.is_key_down(Key::Left) {
             ctx.pan.0 -= 1. / ctx.scale;
             ctx.updated = true;
         }
 
-        if(window.is_key_down(Key::Right)) {
+        if window.is_key_down(Key::Right) {
             ctx.pan.0 += 1. / ctx.scale;
             ctx.updated = true;
         }
 
-        fract.render(&mut ctx);
-
-        // We unwrap here as we want this code to exit if it fails. Real applications may want to handle this in a different way
-        window
-            .update_with_buffer(&ctx.pixels, WIDTH, HEIGHT)
-            .unwrap();
+        if ctx.updated {
+            fract.render(&mut ctx);
+            window
+                .update_with_buffer(&ctx.pixels, ctx.dimensions.0, ctx.dimensions.1)
+                .unwrap();
+        } else {
+            window.update();
+        }
     }
 }
