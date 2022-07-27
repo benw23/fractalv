@@ -1,0 +1,9 @@
+[package]
+name = "fractv"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+minifb = "0.23"
+rayon = "1.5"
+num-complex = "0.4"
